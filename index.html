@@ -294,13 +294,19 @@
                         window.state.laporanList = data.laporanList || [];
                         window.state.suratList = data.suratList || [];
                         window.state.pengeluaranList = data.pengeluaranList || [];
-                        window.state.pengumuman = data.pengumuman || {
-                            judul: "Selamat Datang di Smart RT",
-                            deskripsi: "Sistem bersih dari data dummy. Silakan Ketua RT (Admin) login untuk mulai menambahkan data warga asli.",
-                            tanggal: "-",
-                            dateInput: "",
-                            timeInput: ""
-                        };
+                        
+                        // Perbaikan: Memastikan objek pengumuman selalu utuh dan tidak menyebabkan blank
+                        if (data.pengumuman && data.pengumuman.judul) {
+                            window.state.pengumuman = data.pengumuman;
+                        } else {
+                            window.state.pengumuman = {
+                                judul: "Selamat Datang di Smart RT",
+                                deskripsi: "Sistem bersih dari data dummy. Silakan Ketua RT (Admin) login untuk mulai menambahkan data.",
+                                tanggal: "-",
+                                dateInput: "",
+                                timeInput: ""
+                            };
+                        }
 
                         window.state.users.admin.name = window.state.appSettings.adminName;
                         window.state.users.petugas.name = window.state.appSettings.petugasName;
@@ -747,12 +753,11 @@
         }
 
         // Papan Pengumuman Widget (Reusable)
-        const renderPengumumanWidget = () => {
-            const p = state.pengumuman;
-            if (!p || !p.judul) return '';
+        const renderPengumumanWidget = (pData) => {
+            if (!pData || !pData.judul) return '';
 
             return `
-            <div class="glass-card rounded-2xl p-4 mb-6 relative overflow-hidden group shadow-lg">
+            <div class="glass-card rounded-2xl p-4 mb-6 relative overflow-hidden group shadow-lg animate-[fadeIn_0.3s_ease-out]">
                 <div class="absolute -right-4 -top-4 w-24 h-24 bg-orange-500/20 blur-2xl rounded-full"></div>
                 <div class="flex justify-between items-center mb-3 relative z-10">
                     <div class="flex items-center gap-2">
@@ -764,10 +769,10 @@
                     <span class="text-[10px] font-bold text-white bg-red-500/40 border border-red-500/50 px-2 py-0.5 rounded animate-pulse">Info</span>
                 </div>
                 <div class="relative z-10 bg-black/30 p-3.5 rounded-xl border border-white/5">
-                    <h4 class="text-sm font-extrabold text-white mb-1.5">${p.judul}</h4>
-                    <p class="text-xs text-white/70 leading-relaxed mb-2">${p.deskripsi}</p>
+                    <h4 class="text-sm font-extrabold text-white mb-1.5">${pData.judul}</h4>
+                    <p class="text-xs text-white/70 leading-relaxed mb-2">${pData.deskripsi}</p>
                     <div class="flex items-center gap-2 text-[10px] text-orange-200 font-medium">
-                        <i class="fa-regular fa-calendar"></i> ${p.tanggal}
+                        <i class="fa-regular fa-calendar"></i> ${pData.tanggal}
                     </div>
                 </div>
             </div>
@@ -778,8 +783,8 @@
             let html = '';
             const currentMonthId = "2026-08";
 
-            // Pasang Widget Pengumuman di atas dashboard (Tersedia untuk semua user)
-            html += renderPengumumanWidget();
+            // Pasang Widget Pengumuman di atas dashboard dengan melempar state secara eksplisit
+            html += renderPengumumanWidget(window.state.pengumuman);
 
             if (role === 'warga') {
                 const myId = state.currentUser.wargaId;
