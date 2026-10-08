@@ -2358,13 +2358,37 @@
         };
 
         window.triggerNativeNotification = function(title, body) {
+            // 1. Bunyikan Suara "Ding" (Seperti Notifikasi Pesan Masuk) menggunakan Web Audio API
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.type = 'sine'; // Suara jernih seperti bel
+                osc.frequency.setValueAtTime(880, ctx.currentTime); // Nada tinggi (A5)
+                gain.gain.setValueAtTime(1, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5); // Durasi 0.5 detik memudar
+                osc.start(ctx.currentTime);
+                osc.stop(ctx.currentTime + 0.5);
+            } catch(e) {
+                console.log('Audio tidak didukung di browser ini:', e);
+            }
+
+            // 2. Munculkan Notifikasi di Pusat Kontrol (Control Center / Notification Bar)
             if (!('Notification' in window) || Notification.permission !== 'granted') return;
 
-            const iconUrl = 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Building/3D/building_3d.png';
+            const iconUrl = 'https://cdn-icons-png.flaticon.com/512/2544/2544087.png';
 
-            // Kirim notifikasi melalui ServiceWorker (Lebih bagus, muncul di control center)
+            // Kirim notifikasi melalui ServiceWorker agar lebih stabil dan muncul di sistem OS HP
             if (window.swRegistration && window.swRegistration.showNotification) {
-                window.swRegistration.showNotification(title, { body: body, icon: iconUrl, vibrate: [200, 100, 200] })
+                window.swRegistration.showNotification(title, { 
+                    body: body, 
+                    icon: iconUrl, 
+                    badge: iconUrl, // Icon kecil khusus di status bar Android
+                    vibrate: [200, 100, 200, 100, 200], // Pola getaran khas pesan WA
+                    requireInteraction: true // PENTING: Notifikasi akan tetap menempel di control center sampai di-swipe/dibuka
+                })
                 .catch(() => new Notification(title, { body: body, icon: iconUrl }));
             } else {
                 // Fallback biasa (Desktop Notification API)
