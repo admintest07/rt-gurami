@@ -192,6 +192,7 @@
         const currentMonthId = "2026-08"; 
 
         window.state = {
+            isInitialDataLoaded: false,
             nominalIuran: 50000,
             pengumuman: {
                 judul: "Selamat Datang di Smart RT",
@@ -313,9 +314,12 @@
                                     showCustomToast('⚠️ Sesi Warga ini telah dihapus oleh Admin.');
                                     return;
                                 }
+                                // Perbaikan: Pastikan nama Warga selalu update dari database (bukan ter-reset menjadi kosong)
+                                window.state.currentUser.name = checkWarga.nama;
+                            } else {
+                                window.state.currentUser.name = window.state.users[window.state.currentUser.role].name;
                             }
                             
-                            window.state.currentUser.name = window.state.users[window.state.currentUser.role] ? window.state.users[window.state.currentUser.role].name : window.state.currentUser.name;
                             const headerName = document.getElementById('header-name');
                             if (headerName) headerName.innerText = window.state.currentUser.name;
                         }
@@ -337,9 +341,14 @@
                         }
 
                         const formViews = ['kelola_warga', 'kelola_pengeluaran', 'kelola_pengumuman', 'pengaturan', 'ganti_pin_warga', 'laporan_warga', 'surat_warga'];
-                        if (window.state.currentUser && !formViews.includes(window.state.currentView)) {
-                            renderContent();
+                        if (window.state.currentUser) {
+                            // Perbaikan: Render ulang wajib dilakukan pada sinkronisasi data pertama kali untuk mencegah layar kosong/data hilang
+                            if (!window.state.isInitialDataLoaded || !formViews.includes(window.state.currentView)) {
+                                renderContent();
+                            }
                         }
+                        
+                        window.state.isInitialDataLoaded = true;
                     }
                 });
             } catch (e) {
