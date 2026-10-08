@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Smart RT Gurami</title>
+    <title>Smart RT Mobile</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -143,6 +143,10 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
+                    <!-- Tombol Install PWA -->
+                    <button id="btn-install-pwa" onclick="installPWA()" class="hidden relative w-8 h-8 rounded-full bg-blue-500/20 hover:bg-blue-500/40 flex items-center justify-center border border-blue-500/30 transition-colors" title="Install Aplikasi ke HP">
+                        <i class="fa-solid fa-download text-blue-300 text-sm"></i>
+                    </button>
                     <!-- Tombol Aktifkan Notifikasi PWA -->
                     <button onclick="requestNotificationPermissionUI()" class="relative w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center border border-white/10 transition-colors" title="Aktifkan Notifikasi PWA">
                         <i id="bell-icon" class="fa-regular fa-bell text-white/80 text-sm transition-all duration-300"></i>
@@ -2237,40 +2241,53 @@
 
         // --- SISTEM PWA & NATIVE PUSH NOTIFICATION ---
         window.swRegistration = null;
+        window.deferredPrompt = null;
 
         window.initPWA = function() {
-            // 1. Buat PWA Manifest secara dinamis
+            // 1. Buat PWA Manifest menggunakan Data URI (Jauh lebih stabil dan lulus uji Install PWA)
             const manifest = {
                 "name": "Smart RT Mobile",
                 "short_name": "Smart RT",
-                "start_url": ".",
+                "start_url": window.location.href.split('?')[0],
                 "display": "standalone",
                 "background_color": "#1e1b4b",
                 "theme_color": "#1e1b4b",
-                "icons": [{
-                    "src": "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Building/3D/building_3d.png",
-                    "sizes": "192x192",
-                    "type": "image/png"
-                }]
+                "icons": [
+                    {
+                        "src": "https://cdn-icons-png.flaticon.com/512/2544/2544087.png",
+                        "sizes": "192x192",
+                        "type": "image/png"
+                    },
+                    {
+                        "src": "https://cdn-icons-png.flaticon.com/512/2544/2544087.png",
+                        "sizes": "512x512",
+                        "type": "image/png"
+                    }
+                ]
             };
-            const manifestBlob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
-            const manifestUrl = URL.createObjectURL(manifestBlob);
+            const manifestUrl = 'data:application/manifest+json;charset=utf-8,' + encodeURIComponent(JSON.stringify(manifest));
             document.head.insertAdjacentHTML('beforeend', `<link rel="manifest" href="${manifestUrl}">`);
 
-            // 2. Buat Service Worker dinamis untuk menangani Push & Notifikasi background
+            // 2. Buat Service Worker dinamis (Wajib memiliki listener 'fetch' yang merespons)
             if ('serviceWorker' in navigator) {
                 const swCode = `
                     self.addEventListener('install', (e) => self.skipWaiting());
                     self.addEventListener('activate', (e) => e.waitUntil(clients.claim()));
-                    self.addEventListener('fetch', (e) => { }); // Bypass fetch agar lolos syarat PWA
+                    
+                    // Syarat mutlak Chrome PWA: Harus memiliki interceptor jaringan (Fetch)
+                    self.addEventListener('fetch', (e) => { 
+                        e.respondWith(fetch(e.request).catch(() => new Response('Sedang Offline')));
+                    });
+                    
                     self.addEventListener('push', (e) => {
-                        const data = e.data ? e.data.json() : {title: 'Info Smart RT', body: 'Cek aplikasi.'};
+                        const data = e.data ? e.data.json() : {title: 'Info Smart RT', body: 'Ada pembaruan baru di aplikasi.'};
                         e.waitUntil(self.registration.showNotification(data.title, { 
                             body: data.body, 
-                            icon: 'https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Building/3D/building_3d.png', 
+                            icon: 'https://cdn-icons-png.flaticon.com/512/2544/2544087.png', 
                             vibrate: [200, 100, 200] 
                         }));
                     });
+                    
                     self.addEventListener('notificationclick', (e) => {
                         e.notification.close();
                         e.waitUntil(clients.matchAll({type: 'window'}).then(clientsArr => {
@@ -2283,11 +2300,36 @@
                 const swUrl = URL.createObjectURL(swBlob);
                 navigator.serviceWorker.register(swUrl).then(reg => {
                     window.swRegistration = reg;
-                }).catch(err => console.log('Service Worker tidak aktif karena pembatasan Iframe:', err));
+                }).catch(err => console.log('SW Gagal (Tertahan Iframe):', err));
             }
             
             checkNotificationStatus();
         }
+
+        // 3. Tangkap sinyal kelayakan Install dari Chrome/Edge/Android
+        window.addEventListener('beforeinstallprompt', (e) => {
+            // Cegah munculnya prompt pop-up secara tiba-tiba
+            e.preventDefault();
+            window.deferredPrompt = e;
+            // Tampilkan tombol "Download" di Header
+            const btnInstall = document.getElementById('btn-install-pwa');
+            if(btnInstall) btnInstall.classList.remove('hidden');
+        });
+
+        // 4. Fungsi memicu instalasi saat tombol ditekan
+        window.installPWA = async function() {
+            if (window.deferredPrompt) {
+                window.deferredPrompt.prompt();
+                const { outcome } = await window.deferredPrompt.userChoice;
+                if (outcome === 'accepted') {
+                    showCustomToast('✅ Aplikasi sedang diinstal ke perangkat');
+                }
+                window.deferredPrompt = null;
+                document.getElementById('btn-install-pwa').classList.add('hidden');
+            } else {
+                showCustomToast('💡 Tips: Buka aplikasi ini di tab baru (Safari/Chrome), lalu pilih menu "Tambahkan ke Layar Utama (Add to Home Screen)".');
+            }
+        };
 
         function checkNotificationStatus() {
             if (!('Notification' in window)) return;
