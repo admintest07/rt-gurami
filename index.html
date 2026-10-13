@@ -3,13 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Smart RT Mobile</title>
+    <title>Kampung Babatan</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <!-- Tambahan library untuk cetak PDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    
+    <!-- Tambahan library untuk Visualisasi Grafik -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
@@ -99,10 +102,10 @@
             <div class="absolute bottom-0 left-0 w-32 h-32 bg-pink-500/20 blur-3xl rounded-full pointer-events-none"></div>
             
             <div class="mb-6 relative z-10 shrink-0">
-                <div class="w-16 h-16 bg-gradient-to-tr from-blue-500 to-indigo-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/30 border border-white/20 transform rotate-12">
-                    <i class="fa-solid fa-building-user text-3xl text-white -rotate-12"></i>
+                <div class="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/30 border border-white/20 overflow-hidden bg-white/10 backdrop-blur-sm">
+                    <img src="https://i.ibb.co/xKY89J6K/logo.png" alt="Logo Smart RT" class="w-full h-full object-contain p-1" onerror="this.onerror=null; this.src='https://cdn-icons-png.flaticon.com/512/2544/2544087.png';">
                 </div>
-                <h1 class="text-2xl font-bold tracking-tight text-white mb-1">Smart RT Mobile</h1>
+                <h1 class="text-2xl font-bold tracking-tight text-white mb-1">Kampung Babatan Mobile</h1>
                 <p class="text-xs text-white/60 font-medium">Digitalisasi Lingkungan RT Anda</p>
             </div>
 
@@ -211,7 +214,8 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // Penambahan enableIndexedDbPersistence untuk Mode Offline Fase 2
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = {
@@ -249,6 +253,7 @@
             laporanList: [],
             suratList: [],
             pengeluaranList: [],
+            auditLogList: [], // Tambahan Fase 2: Penampung Log Aktivitas
             users: {
                 warga: { role: 'warga', name: '', wargaId: null, icon: 'fa-user' },
                 petugas: { role: 'petugas', name: 'Petugas Iuran', icon: 'fa-clipboard-user' },
@@ -262,6 +267,13 @@
                 db = getFirestore(app);
                 auth = getAuth(app);
                 
+                // Aktivasi Mode Offline - Fase 2
+                try {
+                    await enableIndexedDbPersistence(db);
+                } catch (err) {
+                    console.warn("Mode Offline Persistence belum bisa diaktifkan/sudah aktif di tab lain:", err);
+                }
+
                 await signInAnonymously(auth);
 
                 document.getElementById('sync-dot').className = "w-1.5 h-1.5 rounded-full bg-green-400";
@@ -298,7 +310,8 @@
                         iuranList: window.state.iuranList,
                         laporanList: window.state.laporanList,
                         suratList: window.state.suratList,
-                        pengeluaranList: window.state.pengeluaranList
+                        pengeluaranList: window.state.pengeluaranList,
+                        auditLogList: window.state.auditLogList // Simpan log saat pertama kali
                     });
                 }
             } catch (e) {
@@ -329,6 +342,7 @@
                         window.state.laporanList = data.laporanList || [];
                         window.state.suratList = data.suratList || [];
                         window.state.pengeluaranList = data.pengeluaranList || [];
+                        window.state.auditLogList = data.auditLogList || []; // Tarik log terbaru
                         
                         // Perbaikan: Memastikan objek pengumuman selalu utuh dan tidak menyebabkan blank
                         if (data.pengumuman && data.pengumuman.judul) {
@@ -365,9 +379,9 @@
                             if (headerName) headerName.innerText = window.state.currentUser.name;
                         } else {
                             // Tampilkan daftar warga secara otomatis di layar login saat data selesai dimuat
-                            if (typeof window.filterWargaLoginListMain === 'function') {
-                                const query = document.getElementById('search-warga-login-main')?.value || '';
-                                window.filterWargaLoginListMain(query);
+                            if (typeof window.filterMainWargaList === 'function') {
+                                const query = document.getElementById('search-main-warga')?.value || '';
+                                window.filterMainWargaList(query);
                             }
                         }
 
@@ -418,7 +432,8 @@
                     iuranList: window.state.iuranList,
                     laporanList: window.state.laporanList,
                     suratList: window.state.suratList,
-                    pengeluaranList: window.state.pengeluaranList
+                    pengeluaranList: window.state.pengeluaranList,
+                    auditLogList: window.state.auditLogList // Simpan Log juga
                 });
             } catch (err) {
                 console.error("Error saving:", err);
@@ -444,6 +459,28 @@
     </script>
 
     <script>
+        // --- TAMBAHAN FASE 2: FUNGSI CATAT LOG AUDIT ---
+        window.catatLogAudit = function(aksi, detail) {
+            const userName = window.state.currentUser ? window.state.currentUser.name : 'Sistem';
+            const logDate = new Date();
+            const timestamp = logDate.toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' });
+            
+            window.state.auditLogList.push({
+                id: Date.now() + Math.random(),
+                user: userName,
+                aksi: aksi,
+                detail: detail,
+                waktu: timestamp,
+                rawTime: logDate.getTime()
+            });
+            
+            // Batasi maksimal 100 log terakhir agar database tidak lambat
+            if (window.state.auditLogList.length > 100) {
+                window.state.auditLogList.sort((a, b) => a.rawTime - b.rawTime);
+                window.state.auditLogList.shift(); // Buang yang paling lama
+            }
+        };
+
         window.restoreSession = function() {
             const savedUser = localStorage.getItem('smartrt_user');
             const savedView = localStorage.getItem('smartrt_view');
@@ -697,7 +734,7 @@
                     html += createNavItem('data_warga', 'fa-users', 'Warga', ['data_warga']);
                 }
                 html += createNavItem('rekap_iuran', 'fa-chart-pie', 'Rekap', ['rekap_iuran']);
-                html += createNavItem('menu_lainnya', 'fa-bars', 'Menu', ['menu_lainnya', 'kelola_laporan', 'kelola_surat', 'pengaturan']);
+                html += createNavItem('menu_lainnya', 'fa-bars', 'Menu', ['menu_lainnya', 'kelola_laporan', 'kelola_surat', 'pengaturan', 'log_audit', 'grafik_keuangan']);
             }
             nav.innerHTML = html;
         }
@@ -741,7 +778,8 @@
                 'Tambah Warga Baru': { i: 'fa-user-plus', theme: 'blue' },
                 'Edit Pengeluaran': { i: 'fa-pen-to-square', theme: 'red' },
                 'Input Pengeluaran': { i: 'fa-cart-plus', theme: 'red' },
-                'Ganti PIN Akun': { i: 'fa-lock', theme: 'slate' }
+                'Ganti PIN Akun': { i: 'fa-lock', theme: 'slate' },
+                'Log Aktivitas': { i: 'fa-history', theme: 'purple' } // Ikon tambahan Audit Log
             };
             
             const config = iconMap[title] || { i: 'fa-layer-group', theme: 'blue' };
@@ -799,7 +837,43 @@
             else if (view === 'kelola_surat') container.innerHTML = renderAdminSurat();
             else if (view === 'pengaturan') container.innerHTML = renderAdminPengaturan();
             else if (view === 'kelola_pengumuman') container.innerHTML = renderKelolaPengumuman();
+            else if (view === 'log_audit') container.innerHTML = renderLogAudit(); // Render Log Audit Fase 2
+            else if (view === 'grafik_keuangan') {
+                container.innerHTML = renderGrafikKeuangan();
+                setTimeout(() => initCharts(), 100); // Inisialisasi chart setelah DOM siap
+            }
         }
+
+        // --- RENDER LOG AUDIT UI (Fase 2) ---
+        window.renderLogAudit = function() {
+            let html = renderTitle('Log Aktivitas', 'Jejak rekam (Audit Trail) sistem');
+            html += `<div class="space-y-3 pb-6">`;
+            
+            if (state.auditLogList.length === 0) {
+                html += renderEmptyState('fa-history', 'Log Kosong', 'Belum ada aktivitas yang tercatat di dalam sistem.');
+            } else {
+                const sortedLogs = [...state.auditLogList].sort((a, b) => b.rawTime - a.rawTime);
+                html += sortedLogs.map(log => `
+                    <div class="glass-card p-3 rounded-xl border-l-4 border-l-indigo-400 flex items-start gap-3">
+                        <div class="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center shrink-0 border border-indigo-500/30 shadow-inner">
+                            <i class="fa-solid fa-bolt text-indigo-300 text-[10px]"></i>
+                        </div>
+                        <div>
+                            <p class="text-xs font-bold text-white mb-0.5">${log.aksi}</p>
+                            <p class="text-[10px] text-white/70 mb-1 leading-relaxed">${log.detail}</p>
+                            <div class="flex items-center gap-2 text-[9px] text-white/50 font-bold uppercase tracking-wider">
+                                <span><i class="fa-solid fa-user text-indigo-300/70 mr-0.5"></i> ${log.user}</span>
+                                <span>•</span>
+                                <span><i class="fa-regular fa-clock text-indigo-300/70 mr-0.5"></i> ${log.waktu}</span>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+            
+            html += `</div>`;
+            return html;
+        };
 
         // Papan Pengumuman Widget (Reusable)
         const renderPengumumanWidget = (pData) => {
@@ -1019,11 +1093,13 @@
             `;
 
             if(role === 'admin') {
+                html += createListMenu('grafik_keuangan', 'fa-chart-area', 'Dashboard Visual (Grafik)', 'bg-pink-500 text-pink-300');
                 html += createListMenu('kelola_pengumuman', 'fa-broadcast-tower', 'Kelola Pengumuman', 'bg-emerald-500 text-emerald-300');
                 html += createListMenu('kas_rt', 'fa-money-bill-transfer', 'Kelola Kas & Pengeluaran', 'bg-red-500 text-red-300');
                 html += createListMenu('kelola_laporan', 'fa-bullhorn', 'Kelola Laporan Warga', 'bg-orange-500 text-orange-300');
                 html += createListMenu('kelola_surat', 'fa-envelope-open-text', 'Pengajuan Surat', 'bg-blue-500 text-blue-300');
                 html += createListMenu('pengaturan', 'fa-cog', 'Pengaturan Iuran', 'bg-gray-500 text-gray-300');
+                html += createListMenu('log_audit', 'fa-history', 'Log Aktivitas (Audit Trail)', 'bg-indigo-500 text-indigo-300'); // Fase 2
             }
             html += `</div>`;
 
@@ -1143,14 +1219,16 @@
 
         async function submitLaporan(e) {
             e.preventDefault();
+            const title = document.getElementById('lapor-judul').value;
             state.laporanList.push({
                 id: Date.now(),
                 wargaId: state.currentUser.wargaId,
-                judul: document.getElementById('lapor-judul').value,
+                judul: title,
                 deskripsi: document.getElementById('lapor-deskripsi').value,
                 tanggal: new Date().toISOString().split('T')[0],
                 status: 'Menunggu'
             });
+            window.catatLogAudit('Buat Laporan', title); // Audit
             await saveToCloud();
             renderContent();
             showCustomToast('✅ Laporan terkirim');
@@ -1203,14 +1281,16 @@
 
         async function submitSurat(e) {
             e.preventDefault();
+            const type = document.getElementById('surat-jenis').value;
             state.suratList.push({
                 id: Date.now(),
                 wargaId: state.currentUser.wargaId,
-                jenis: document.getElementById('surat-jenis').value,
+                jenis: type,
                 keperluan: document.getElementById('surat-keperluan').value,
                 tanggal: new Date().toISOString().split('T')[0],
                 status: 'Menunggu'
             });
+            window.catatLogAudit('Minta Surat', type); // Audit
             await saveToCloud();
             renderContent();
             showCustomToast('✅ Surat diajukan');
@@ -1411,6 +1491,7 @@
                     bulan: bln, jumlah: state.nominalIuran, status: 'Lunas', tanggal: tgl
                 });
             });
+            window.catatLogAudit('Input Iuran', `Warga ID ${penagihanSelectedWargaId} (${penagihanSelectedMonths.length} bln)`); // Audit
             await saveToCloud();
             showCustomToast(`✅ Pembayaran berhasil dicatat`);
             renderContent();
@@ -1504,13 +1585,66 @@
             return html;
         }
 
+        // --- TAMBAHAN FASE 2: FUNGSI BACA FILE CSV ---
+        window.prosesImporCSV = function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const text = e.target.result;
+                const lines = text.split('\n');
+                let count = 0;
+
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (!line) continue;
+                    
+                    // Lewati baris pertama jika itu adalah judul kolom (Header)
+                    if (i === 0 && line.toLowerCase().includes('nama')) continue;
+
+                    // Pisahkan berdasarkan koma atau titik koma
+                    const cols = line.split(/[,;]/); 
+                    if (cols.length >= 2) {
+                        state.wargaList.push({
+                            id: Date.now() + Math.random() + i,
+                            nama: cols[0].trim(),
+                            blok: cols[1].trim(),
+                            telp: cols[2] ? cols[2].trim() : '-',
+                            status: 'Aktif',
+                            pin: '123456' // Sesuai kesepakatan Fase 1
+                        });
+                        count++;
+                    }
+                }
+
+                if (count > 0) {
+                    window.catatLogAudit('Impor CSV Warga', `Berhasil impor ${count} data baru`);
+                    await saveToCloud();
+                    renderContent();
+                    showCustomToast(`✅ ${count} Warga berhasil diimpor`);
+                } else {
+                    showCustomToast('⚠️ Format CSV tidak valid atau kosong');
+                }
+                event.target.value = ''; // Reset form input file
+            };
+            reader.readAsText(file);
+        };
+
         function renderAdminDataWarga() {
             let html = renderTitle('Master Data Warga', 'Daftar penduduk lingkungan RT');
             
+            // Tambahan Fase 2: Tombol Impor CSV berjejer dengan Tambah Manual
             html += `
-                <button onclick="siapkanTambahWarga()" class="w-full glass-card py-3 mb-4 rounded-xl text-sm font-bold flex justify-center items-center gap-2 text-white hover:bg-white/10 border border-indigo-500/30 shadow-lg transition-colors">
-                    <i class="fa-solid fa-user-plus"></i> Tambah Warga Baru
-                </button>
+                <div class="grid grid-cols-2 gap-3 mb-4">
+                    <button onclick="siapkanTambahWarga()" class="w-full glass-card py-3 rounded-xl text-xs font-bold flex justify-center items-center gap-2 text-white hover:bg-white/10 border border-indigo-500/30 shadow-lg transition-colors">
+                        <i class="fa-solid fa-user-plus"></i> Tambah Manual
+                    </button>
+                    <button onclick="document.getElementById('input-csv-warga').click()" class="w-full glass-card py-3 rounded-xl text-xs font-bold flex justify-center items-center gap-2 text-white hover:bg-white/10 border border-green-500/30 shadow-lg transition-colors">
+                        <i class="fa-solid fa-file-csv text-green-400"></i> Impor CSV
+                    </button>
+                    <input type="file" id="input-csv-warga" accept=".csv" class="hidden" onchange="prosesImporCSV(event)">
+                </div>
                 <div class="space-y-2">
             `;
             
@@ -1562,6 +1696,8 @@
 
         function hapusWarga(id) {
             showCustomConfirm('Hapus data warga ini? (Riwayat pembayaran iuran mereka akan tetap tersimpan).', async () => {
+                const trg = state.wargaList.find(w => w.id === id);
+                window.catatLogAudit('Hapus Warga', trg ? trg.nama : `ID: ${id}`); // Audit
                 state.wargaList = state.wargaList.filter(w => w.id !== id);
                 await saveToCloud();
                 renderContent();
@@ -1605,9 +1741,10 @@
         async function submitWarga(e) {
             e.preventDefault();
             const isEdit = editWargaId !== null;
+            const namaWarga = document.getElementById('warga-nama').value;
             const wData = {
                 id: isEdit ? editWargaId : Date.now(),
-                nama: document.getElementById('warga-nama').value,
+                nama: namaWarga,
                 blok: document.getElementById('warga-blok').value,
                 telp: document.getElementById('warga-telp').value,
                 status: 'Aktif',
@@ -1615,6 +1752,7 @@
             };
             
             showCustomToast('<i class="fa-solid fa-circle-check text-lg"></i> Berhasil Disimpan!');
+            window.catatLogAudit(isEdit ? 'Edit Warga' : 'Tambah Warga Baru', namaWarga); // Audit
 
             if (isEdit) {
                 const idx = state.wargaList.findIndex(w => w.id === editWargaId);
@@ -1744,10 +1882,12 @@
 
         async function updateStatusL(btn, id, st) {
             state.laporanList.find(l => l.id === id).status = st;
+            window.catatLogAudit(`Ubah Laporan -> ${st}`, `ID: ${id}`); // Audit
             await saveToCloud(); renderContent();
         }
         async function updateStatusS(btn, id, st) {
             state.suratList.find(s => s.id === id).status = st;
+            window.catatLogAudit(`Ubah Surat -> ${st}`, `ID: ${id}`); // Audit
             await saveToCloud(); renderContent();
         }
         async function simpanSetting(e) {
@@ -1770,6 +1910,7 @@
                  if(headerName) headerName.innerText = state.currentUser.name;
             }
 
+            window.catatLogAudit('Perbarui Pengaturan', 'Nominal Iuran & Hak Akses'); // Audit
             await saveToCloud();
             showCustomToast('✅ Pengaturan & Keamanan disimpan');
             renderContent();
@@ -1871,6 +2012,8 @@
 
         function hapusPengeluaran(id) {
             showCustomConfirm('Hapus catatan pengeluaran ini secara permanen?', async () => {
+                const trg = state.pengeluaranList.find(p => p.id === id);
+                window.catatLogAudit('Hapus Pengeluaran', trg ? trg.judul : `ID: ${id}`); // Audit
                 state.pengeluaranList = state.pengeluaranList.filter(p => p.id !== id);
                 await saveToCloud();
                 renderContent();
@@ -1883,6 +2026,7 @@
                 showCustomToast("⚠️ Memuat library PDF, coba lagi dalam beberapa detik.");
                 return;
             }
+            window.catatLogAudit('Unduh PDF', 'Laporan Kas RT'); // Audit
 
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('p', 'mm', 'a4'); 
@@ -2003,9 +2147,10 @@
         async function submitPengeluaran(e) {
             e.preventDefault();
             const isEdit = editId !== null;
+            const namaP = document.getElementById('pengeluaran-judul').value;
             const pData = {
                 id: isEdit ? editId : Date.now(),
-                judul: document.getElementById('pengeluaran-judul').value,
+                judul: namaP,
                 nominal: parseInt(document.getElementById('pengeluaran-nominal').value),
                 deskripsi: document.getElementById('pengeluaran-deskripsi').value,
                 bukti: document.getElementById('pengeluaran-bukti').value,
@@ -2019,6 +2164,7 @@
                 state.pengeluaranList.push(pData);
             }
             
+            window.catatLogAudit(isEdit ? 'Edit Pengeluaran' : 'Tambah Pengeluaran', namaP); // Audit
             await saveToCloud();
             editId = null;
             navigate('kas_rt');
@@ -2155,6 +2301,7 @@
             }
 
             state.wargaList[wargaIdx].pin = pinBaru;
+            window.catatLogAudit('Ganti PIN Pribadi', 'Tindakan Mandiri Warga'); // Audit
             await saveToCloud();
             
             showCustomToast('✅ PIN Keamanan berhasil diperbarui');
@@ -2210,6 +2357,7 @@
                 const wIdx = state.wargaList.findIndex(w => w.id === wargaId);
                 if (wIdx > -1) {
                     state.wargaList[wIdx].pin = newPin;
+                    window.catatLogAudit('Reset PIN Warga', `Warga: ${warga.nama}`); // Audit
                     await saveToCloud();
                     showCustomToast('✅ PIN Warga berhasil direset');
                 }
@@ -2281,21 +2429,236 @@
             
             const formattedDisplay = `${hari}, ${tanggal} ${bulan} ${tahun}, ${timeVal} WIB`;
 
+            const judulBaru = document.getElementById('pengumuman-judul').value;
+
             state.pengumuman = {
-                judul: document.getElementById('pengumuman-judul').value,
+                judul: judulBaru,
                 deskripsi: document.getElementById('pengumuman-deskripsi').value,
                 tanggal: formattedDisplay,
                 dateInput: dateVal,
                 timeInput: timeVal
             };
+            
+            window.catatLogAudit('Update Pengumuman', judulBaru); // Audit
             await saveToCloud();
             showCustomToast('✅ Pengumuman berhasil diperbarui');
             navigate('dashboard');
         };
 
+        // --- TAMBAHAN: DASHBOARD VISUAL (GRAFIK KEUANGAN) ---
+        window.renderGrafikKeuangan = function() {
+            let html = renderTitle('Dashboard Visual', 'Grafik interaktif keuangan RT');
+            
+            html += `
+                <!-- Grafik 1: Tren Bar Chart -->
+                <div class="glass-card p-4 rounded-2xl mb-6 shadow-lg border-t-2 border-pink-400 animate-[fadeIn_0.3s_ease-out]">
+                    <div class="flex justify-between items-center mb-4">
+                        <h4 class="text-[10px] font-bold text-white/80 uppercase tracking-widest flex items-center gap-2">
+                            <i class="fa-solid fa-chart-simple text-pink-300"></i> Tren Arus Kas
+                        </h4>
+                        <!-- Custom Legend -->
+                        <div class="flex gap-2 text-[9px] font-bold text-white/60">
+                            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-green-400"></span> Masuk</span>
+                            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-400"></span> Keluar</span>
+                        </div>
+                    </div>
+                    
+                    <div class="relative w-full h-52">
+                        <canvas id="trendChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Grafik 2: Status Iuran Doughnut Chart -->
+                <div class="glass-card p-4 rounded-2xl mb-6 shadow-lg border-t-2 border-indigo-400 animate-[fadeIn_0.4s_ease-out]">
+                    <h4 class="text-[10px] font-bold text-white/80 uppercase tracking-widest mb-4 flex items-center gap-2 text-center w-full justify-center">
+                        <i class="fa-solid fa-chart-pie text-indigo-300"></i> Kepatuhan Iuran (Bulan Ini)
+                    </h4>
+                    <div class="relative w-full h-52 flex justify-center">
+                        <canvas id="statusChart"></canvas>
+                    </div>
+                    <!-- Custom Legend untuk Doughnut -->
+                    <div class="flex justify-center gap-5 mt-5">
+                        <div class="flex flex-col items-center">
+                            <span class="text-xs font-extrabold text-green-300" id="legend-lunas-val">0</span>
+                            <div class="flex items-center gap-1.5 mt-0.5">
+                                <span class="w-2.5 h-2.5 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.5)]"></span>
+                                <span class="text-[10px] font-bold text-white/70">Warga Lunas</span>
+                            </div>
+                        </div>
+                        <div class="w-px bg-white/10"></div>
+                        <div class="flex flex-col items-center">
+                            <span class="text-xs font-extrabold text-red-300" id="legend-nunggak-val">0</span>
+                            <div class="flex items-center gap-1.5 mt-0.5">
+                                <span class="w-2.5 h-2.5 rounded-full bg-red-400 shadow-[0_0_8px_rgba(248,113,113,0.5)]"></span>
+                                <span class="text-[10px] font-bold text-white/70">Tunggakan</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <button onclick="navigate('menu_lainnya')" class="w-full py-3.5 rounded-xl font-bold bg-white/10 hover:bg-white/20 text-white border border-white/20 text-sm flex items-center justify-center gap-2 transition-colors active:scale-95 animate-[fadeIn_0.5s_ease-out]">
+                    <i class="fa-solid fa-arrow-left"></i> Kembali ke Menu
+                </button>
+            `;
+            return html;
+        };
+
+        window.initCharts = function() {
+            if (!document.getElementById('trendChart') || !document.getElementById('statusChart')) return;
+            
+            // Konfigurasi Default Font & Warna untuk Dark Mode
+            Chart.defaults.color = 'rgba(255, 255, 255, 0.6)';
+            Chart.defaults.font.family = "'Plus Jakarta Sans', sans-serif";
+            
+            // --- DATA PERSIAPAN GRAFIK TREN (CHART 1) ---
+            const bulanList = getBulanList(); 
+            const labels = bulanList.map(b => formatBln(b).split(' ')[0]); 
+            
+            // Hitung pemasukan per bulan
+            const dataMasuk = bulanList.map(b => {
+                return state.iuranList.filter(i => i.bulan === b && i.status === 'Lunas').reduce((sum, i) => sum + i.jumlah, 0);
+            });
+            
+            // Hitung pengeluaran per bulan
+            const dataKeluar = bulanList.map(b => {
+                return state.pengeluaranList.filter(p => p.tanggal && p.tanggal.startsWith(b)).reduce((sum, p) => sum + p.nominal, 0);
+            });
+
+            // Eksekusi Render Grafik Tren (Bar)
+            new Chart(document.getElementById('trendChart'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Pemasukan',
+                            data: dataMasuk,
+                            backgroundColor: 'rgba(74, 222, 128, 0.85)', // Tailwind green-400
+                            hoverBackgroundColor: 'rgba(74, 222, 128, 1)',
+                            borderRadius: { topLeft: 4, topRight: 4 },
+                            barPercentage: 0.7,
+                            categoryPercentage: 0.8
+                        },
+                        {
+                            label: 'Pengeluaran',
+                            data: dataKeluar,
+                            backgroundColor: 'rgba(248, 113, 113, 0.85)', // Tailwind red-400
+                            hoverBackgroundColor: 'rgba(248, 113, 113, 1)',
+                            borderRadius: { topLeft: 4, topRight: 4 },
+                            barPercentage: 0.7,
+                            categoryPercentage: 0.8
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: false }, // Disembunyikan (pakai custom HTML legend)
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                            titleFont: { size: 11, family: "'Plus Jakarta Sans', sans-serif" },
+                            bodyFont: { size: 11 },
+                            padding: 10,
+                            cornerRadius: 8,
+                            borderColor: 'rgba(255,255,255,0.1)',
+                            borderWidth: 1,
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) label += ': ';
+                                    if (context.parsed.y !== null) {
+                                        label += new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(context.parsed.y);
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(255, 255, 255, 0.05)', drawBorder: false },
+                            ticks: {
+                                font: { size: 9 },
+                                padding: 8,
+                                callback: function(value) {
+                                    if (value >= 1000000) return (value / 1000000) + 'jt';
+                                    if (value >= 1000) return (value / 1000) + 'rb';
+                                    return value;
+                                }
+                            }
+                        },
+                        x: {
+                            grid: { display: false, drawBorder: false },
+                            ticks: { font: { size: 9 }, padding: 6 }
+                        }
+                    }
+                }
+            });
+
+            // --- DATA PERSIAPAN GRAFIK STATUS IURAN (CHART 2) ---
+            const currentMonthId = "2026-08"; 
+            const totalWarga = state.wargaList.length;
+            const lunasCount = state.iuranList.filter(i => i.bulan === currentMonthId && i.status === 'Lunas').length;
+            const nunggakCount = totalWarga - lunasCount;
+            
+            // Perbarui nilai pada Custom Legend HTML
+            document.getElementById('legend-lunas-val').innerText = `${lunasCount} KK`;
+            document.getElementById('legend-nunggak-val').innerText = `${nunggakCount} KK`;
+
+            // Eksekusi Render Grafik Doughnut
+            new Chart(document.getElementById('statusChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['Lunas', 'Nunggak'],
+                    datasets: [{
+                        data: [lunasCount, nunggakCount],
+                        backgroundColor: [
+                            'rgba(74, 222, 128, 0.9)', // Tailwind green-400
+                            'rgba(248, 113, 113, 0.9)' // Tailwind red-400
+                        ],
+                        hoverBackgroundColor: [
+                            'rgba(74, 222, 128, 1)',
+                            'rgba(248, 113, 113, 1)'
+                        ],
+                        borderColor: '#1e1b4b', // Warna senada dengan background utama
+                        borderWidth: 4,
+                        hoverOffset: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '75%', // Ketebalan cincin
+                    plugins: {
+                        legend: { display: false }, // Disembunyikan (pakai custom HTML legend)
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                            titleFont: { size: 11 },
+                            bodyFont: { size: 11 },
+                            padding: 10,
+                            cornerRadius: 8,
+                            borderColor: 'rgba(255,255,255,0.1)',
+                            borderWidth: 1,
+                            callbacks: {
+                                label: function(context) {
+                                    let percentage = Math.round((context.parsed / totalWarga) * 100) || 0;
+                                    return ` ${context.label}: ${context.parsed} KK (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        };
+
         // --- SISTEM PWA & NATIVE PUSH NOTIFICATION ---
         window.swRegistration = null;
         window.deferredPrompt = null;
+        
+        const appLogoUrl = 'https://i.ibb.co/xKY89J6K/logo.png'; // URL Gambar Utama
 
         window.initPWA = function() {
             // 1. Buat PWA Manifest menggunakan Data URI (Jauh lebih stabil dan lulus uji Install PWA)
@@ -2308,12 +2671,12 @@
                 "theme_color": "#1e1b4b",
                 "icons": [
                     {
-                        "src": "https://cdn-icons-png.flaticon.com/512/2544/2544087.png",
+                        "src": appLogoUrl,
                         "sizes": "192x192",
                         "type": "image/png"
                     },
                     {
-                        "src": "https://cdn-icons-png.flaticon.com/512/2544/2544087.png",
+                        "src": appLogoUrl,
                         "sizes": "512x512",
                         "type": "image/png"
                     }
@@ -2337,7 +2700,7 @@
                         const data = e.data ? e.data.json() : {title: 'Info Smart RT', body: 'Ada pembaruan baru di aplikasi.'};
                         e.waitUntil(self.registration.showNotification(data.title, { 
                             body: data.body, 
-                            icon: 'https://cdn-icons-png.flaticon.com/512/2544/2544087.png', 
+                            icon: '${appLogoUrl}', 
                             vibrate: [200, 100, 200] 
                         }));
                     });
@@ -2441,7 +2804,7 @@
             // 2. Munculkan Notifikasi di Pusat Kontrol (Control Center / Notification Bar)
             if (!('Notification' in window) || Notification.permission !== 'granted') return;
 
-            const iconUrl = 'https://cdn-icons-png.flaticon.com/512/2544/2544087.png';
+            const iconUrl = appLogoUrl;
 
             // Kirim notifikasi melalui ServiceWorker agar lebih stabil dan muncul di sistem OS HP
             if (window.swRegistration && window.swRegistration.showNotification) {
